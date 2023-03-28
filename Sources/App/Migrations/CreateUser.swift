@@ -28,7 +28,7 @@ struct CreateUserToken: AsyncMigration {
         try await database.schema(UserToken.schema)
             .id()
             .field("user_id", .string, .required,
-                   .references("users", "id"))
+                   .references(User.schema, "id"))
             .unique(on: "user_id")
             .field("value", .string, .required)
             .create()

@@ -25,6 +25,9 @@ final class GameRoom: Model, Content {
 
     @Parent(key: "creator_id")
     var creator: User
+    
+    @Parent(key: "admin_id")
+    var admin: User
 
     init() { }
 
@@ -32,11 +35,13 @@ final class GameRoom: Model, Content {
          name: String,
          creatorID: UUID,
          code: String,
-         isPrivate: Bool) {
+         isPrivate: Bool,
+         adminID: UUID) {
         self.id = id
         self.name = name
         self.$creator.id = creatorID
         self.invitationCode = code
         self.isPrivate = isPrivate
+        self.$admin.id = adminID
     }
 }

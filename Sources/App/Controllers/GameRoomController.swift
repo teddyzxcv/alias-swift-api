@@ -22,7 +22,11 @@ struct GameRoomController: RouteCollection {
             throw Abort(.unauthorized)
         }
         let input = try req.content.decode(GameRoom.Create.self)
-        let gameRoom = GameRoom(name: input.name, creatorID: user.id!, code: generateInvitationCode(), isPrivate: input.isPrivate)
+        let gameRoom = GameRoom(name: input.name,
+                                creatorID: user.id!,
+                                code: generateInvitationCode(),
+                                isPrivate: input.isPrivate,
+                                adminID: user.id!)
         return gameRoom.save(on: req.db).map { gameRoom }
     }
 
@@ -33,14 +37,15 @@ struct GameRoomController: RouteCollection {
         return GameRoom.query(on: req.db)
             .filter(\.$isPrivate == false)
             .with(\.$creator)
+            .with(\.$admin)
             .all().flatMapThrowing { gameRooms in
             gameRooms.map { gameRoom in
-                let creator = gameRoom.creator
                 return GameRoom.Public(id: gameRoom.id,
                                        name: gameRoom.name,
-                                       creator: creator.name,
+                                       creator: gameRoom.creator.name,
                                        isPrivate: gameRoom.isPrivate,
-                                       invitationCode: gameRoom.invitationCode)
+                                       invitationCode: gameRoom.invitationCode,
+                                       admin: gameRoom.admin.name)
             }
         }
     }
@@ -64,6 +69,7 @@ extension GameRoom {
         var creator: String
         var isPrivate: Bool
         var invitationCode: String
+        var admin: String
     }
     struct Create: Content {
         var name: String

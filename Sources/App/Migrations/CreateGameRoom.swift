@@ -15,9 +15,10 @@ struct CreateGameRoom: AsyncMigration {
         try await database.schema("game_rooms")
             .id()
             .field("name", .string, .required)
-            .field("creator_id", .uuid, .required, .references("users", "id"))
+            .field("creator_id", .uuid, .required, .references(User.schema, "id"))
             .field("invitation_code", .string, .required)
             .field("is_private", .bool, .required)
+            .field("admin_id", .uuid, .required, .references(User.schema, "id"))
             .create()
     }
 
