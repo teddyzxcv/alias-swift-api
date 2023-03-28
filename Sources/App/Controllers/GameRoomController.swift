@@ -26,11 +26,23 @@ struct GameRoomController: RouteCollection {
         return gameRoom.save(on: req.db).map { gameRoom }
     }
 
-    func listAll(req: Request) throws -> EventLoopFuture<[GameRoom]> {
+    func listAll(req: Request) throws -> EventLoopFuture<[GameRoom.Public]> {
         guard req.auth.has(User.self) else {
             throw Abort(.unauthorized)
         }
-        return GameRoom.query(on: req.db).with(\.$creator).all()
+        return GameRoom.query(on: req.db)
+            .filter(\.$isPrivate == false)
+            .with(\.$creator)
+            .all().flatMapThrowing { gameRooms in
+            gameRooms.map { gameRoom in
+                let creator = gameRoom.creator
+                return GameRoom.Public(id: gameRoom.id,
+                                       name: gameRoom.name,
+                                       creator: creator.name,
+                                       isPrivate: gameRoom.isPrivate,
+                                       invitationCode: gameRoom.invitationCode)
+            }
+        }
     }
 
     // Private function that generate invitation code length of 5 
@@ -43,7 +55,16 @@ struct GameRoomController: RouteCollection {
 
 }
 
+
+
 extension GameRoom {
+    struct Public: Content {
+        var id: UUID?
+        var name: String
+        var creator: String
+        var isPrivate: Bool
+        var invitationCode: String
+    }
     struct Create: Content {
         var name: String
         var isPrivate: Bool

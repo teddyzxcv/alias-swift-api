@@ -56,12 +56,12 @@ struct UsersController: RouteCollection {
     }
     
     // Add the getProfile function in the UsersController
-    func getProfile(req: Request) throws -> EventLoopFuture<User> {
+    func getProfile(req: Request) throws -> EventLoopFuture<String> {
         // You can safely access the authenticated user since the middleware has already checked for the token.
         guard let user = req.auth.get(User.self) else {
             throw Abort(.unauthorized)
         }
-        return req.eventLoop.future(user)
+        return req.eventLoop.future(user.name)
     }
 
 
