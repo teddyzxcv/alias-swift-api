@@ -19,7 +19,7 @@ struct CreateUser: AsyncMigration {
     }
 
     func revert(on database: Database) async throws {
-        try await database.schema("users").delete()
+        try await database.schema(User.schema).delete()
     }
 }
 
@@ -27,14 +27,15 @@ struct CreateUserToken: AsyncMigration {
     func prepare(on database: Database) async throws {
         try await database.schema(UserToken.schema)
             .id()
-            .field("user_id", .string, .required)
+            .field("user_id", .string, .required,
+                   .references(User.schema, "id"))
             .unique(on: "user_id")
             .field("value", .string, .required)
             .create()
     }
 
     func revert(on database: Database) async throws {
-        try await database.schema("UserToken.schema").delete()
+        try await database.schema(UserToken.schema).delete()
     }
 }
 

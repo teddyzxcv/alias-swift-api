@@ -15,6 +15,9 @@ struct UsersController: RouteCollection {
         let users = routes.grouped("users")
         users.post("register", use: register)
         users.post("login", use: login)
+        
+        let protectedUsers = users.grouped(UserTokenAuthenticator())
+        protectedUsers.get("profile", use: getProfile)
     }
     
     func register(req: Request) throws -> EventLoopFuture<User> {
@@ -51,8 +54,18 @@ struct UsersController: RouteCollection {
                 }
             }
     }
+    
+    // Add the getProfile function in the UsersController
+    func getProfile(req: Request) throws -> EventLoopFuture<String> {
+        // You can safely access the authenticated user since the middleware has already checked for the token.
+        guard let user = req.auth.get(User.self) else {
+            throw Abort(.unauthorized)
+        }
+        return req.eventLoop.future(user.name)
+    }
 
 
+    // MARK: Private section.
     
     private func generateToken() throws -> String {
         let token = SymmetricKey(size: .bits256)
