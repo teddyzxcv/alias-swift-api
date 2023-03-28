@@ -16,7 +16,7 @@ struct GameRoomController: RouteCollection {
         protectedGameRooms.post("create", use: create)
         protectedGameRooms.get("list-all", use: listAll)
     }
-
+    
     func create(req: Request) throws -> EventLoopFuture<GameRoom> {
         guard let user = req.auth.get(User.self) else {
             throw Abort(.unauthorized)
@@ -29,7 +29,7 @@ struct GameRoomController: RouteCollection {
                                 adminID: user.id!)
         return gameRoom.save(on: req.db).map { gameRoom }
     }
-
+    
     func listAll(req: Request) throws -> EventLoopFuture<[GameRoom.Public]> {
         guard req.auth.has(User.self) else {
             throw Abort(.unauthorized)
@@ -39,25 +39,25 @@ struct GameRoomController: RouteCollection {
             .with(\.$creator)
             .with(\.$admin)
             .all().flatMapThrowing { gameRooms in
-            gameRooms.map { gameRoom in
-                return GameRoom.Public(id: gameRoom.id,
-                                       name: gameRoom.name,
-                                       creator: gameRoom.creator.name,
-                                       isPrivate: gameRoom.isPrivate,
-                                       invitationCode: gameRoom.invitationCode,
-                                       admin: gameRoom.admin.name)
+                gameRooms.map { gameRoom in
+                    return GameRoom.Public(id: gameRoom.id,
+                                           name: gameRoom.name,
+                                           creator: gameRoom.creator.name,
+                                           isPrivate: gameRoom.isPrivate,
+                                           invitationCode: gameRoom.invitationCode,
+                                           admin: gameRoom.admin.name)
+                }
             }
-        }
     }
-
-    // Private function that generate invitation code length of 5 
+    
+    // Private function that generate invitation code length of 5
     private func generateInvitationCode() -> String {
         let letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
         return String((0..<5).map{ _ in letters.randomElement()! })
     }
     
-
-
+    
+    
 }
 
 

@@ -32,7 +32,7 @@ struct UsersController: RouteCollection {
     func login(req: Request) throws -> EventLoopFuture<UserToken> {
         try User.Login.validate(content: req)
         let input = try req.content.decode(User.Login.self)
-
+        
         return User.query(on: req.db)
             .filter(\.$email == input.email)
             .first()
@@ -40,7 +40,7 @@ struct UsersController: RouteCollection {
                 guard let user = user else {
                     return req.eventLoop.future(error: Abort(.unauthorized))
                 }
-
+                
                 do {
                     if try Bcrypt.verify(input.password, created: user.passwordHash) {
                         let token = try self.generateToken()
@@ -63,8 +63,8 @@ struct UsersController: RouteCollection {
         }
         return req.eventLoop.future(user.name)
     }
-
-
+    
+    
     // MARK: Private section.
     
     private func generateToken() throws -> String {

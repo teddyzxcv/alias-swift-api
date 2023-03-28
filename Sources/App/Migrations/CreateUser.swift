@@ -17,7 +17,7 @@ struct CreateUser: AsyncMigration {
             .field("password_hash", .string, .required)
             .create()
     }
-
+    
     func revert(on database: Database) async throws {
         try await database.schema(User.schema).delete()
     }
@@ -33,7 +33,7 @@ struct CreateUserToken: AsyncMigration {
             .field("value", .string, .required)
             .create()
     }
-
+    
     func revert(on database: Database) async throws {
         try await database.schema(UserToken.schema).delete()
     }

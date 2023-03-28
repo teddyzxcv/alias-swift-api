@@ -21,7 +21,7 @@ struct CreateGameRoom: AsyncMigration {
             .field("admin_id", .uuid, .required, .references(User.schema, "id"))
             .create()
     }
-
+    
     func revert(on database: Database) async throws {
         try await database.schema("game_rooms").delete()
     }

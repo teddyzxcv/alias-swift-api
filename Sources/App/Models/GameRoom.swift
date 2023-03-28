@@ -10,10 +10,10 @@ import Vapor
 
 final class GameRoom: Model, Content {
     static let schema = "game_rooms"
-
+    
     @ID(key: .id)
     var id: UUID?
-
+    
     @Field(key: "name")
     var name: String
     
@@ -22,15 +22,15 @@ final class GameRoom: Model, Content {
     
     @Field(key: "is_private")
     var isPrivate: Bool
-
+    
     @Parent(key: "creator_id")
     var creator: User
     
     @Parent(key: "admin_id")
     var admin: User
-
+    
     init() { }
-
+    
     init(id: UUID? = nil,
          name: String,
          creatorID: UUID,
