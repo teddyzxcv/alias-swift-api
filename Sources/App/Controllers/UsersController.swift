@@ -18,6 +18,7 @@ struct UsersController: RouteCollection {
         
         let protectedUsers = users.grouped(UserTokenAuthenticator())
         protectedUsers.get("profile", use: getProfile)
+        protectedUsers.post("logout", use: logout)
     }
     
     func register(req: Request) throws -> EventLoopFuture<User> {
@@ -62,6 +63,18 @@ struct UsersController: RouteCollection {
             throw Abort(.unauthorized)
         }
         return req.eventLoop.future(user.name)
+    }
+
+    // Handler that let user logout (revoke tokens)
+    func logout(req: Request) throws -> EventLoopFuture<HTTPStatus> {
+        guard let user = req.auth.get(User.self) else {
+            throw Abort(.unauthorized)
+        }
+        
+        return UserToken.query(on: req.db)
+            .filter(\.$user.$id == user.id!)
+            .delete()
+            .transform(to: .ok)
     }
     
     
