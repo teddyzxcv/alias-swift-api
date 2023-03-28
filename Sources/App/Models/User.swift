@@ -8,7 +8,7 @@ import Fluent
 import Vapor
 import Crypto
 
-final class User: Model, Content {
+final class User: Model, Content, Authenticatable {
     static let schema = "users"
     
     @ID(key: .id)
@@ -65,8 +65,8 @@ final class UserToken: Model, Content {
     @ID(key: .id)
     var id: UUID?
     
-    @Field(key: "user_id")
-    var userID: UUID
+    @Parent(key: "user_id")
+    var user: User
     
     @Field(key: "value")
     var value: String
@@ -75,7 +75,8 @@ final class UserToken: Model, Content {
     
     init(id: UUID? = nil, userID: UUID, value: String) {
         self.id = id
-        self.userID = userID
+        self.$user.id = userID
         self.value = value
     }
 }
+
