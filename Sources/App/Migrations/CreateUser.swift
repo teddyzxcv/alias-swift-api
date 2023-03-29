@@ -1,5 +1,5 @@
 //
-//  File.swift
+//  CreateUser.swift
 //  
 //
 //  Created by ZhengWu Pan on 28.03.2023.
@@ -17,7 +17,7 @@ struct CreateUser: AsyncMigration {
             .field("password_hash", .string, .required)
             .create()
     }
-
+    
     func revert(on database: Database) async throws {
         try await database.schema(User.schema).delete()
     }
@@ -27,13 +27,13 @@ struct CreateUserToken: AsyncMigration {
     func prepare(on database: Database) async throws {
         try await database.schema(UserToken.schema)
             .id()
-            .field("user_id", .string, .required,
+            .field("user_id", .uuid, .required,
                    .references(User.schema, "id"))
             .unique(on: "user_id")
             .field("value", .string, .required)
             .create()
     }
-
+    
     func revert(on database: Database) async throws {
         try await database.schema(UserToken.schema).delete()
     }

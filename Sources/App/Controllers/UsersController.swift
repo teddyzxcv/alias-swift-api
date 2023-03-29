@@ -1,5 +1,5 @@
 //
-//  File.swift
+//  UsersController.swift
 //  
 //
 //  Created by ZhengWu Pan on 28.03.2023.
@@ -18,6 +18,7 @@ struct UsersController: RouteCollection {
         
         let protectedUsers = users.grouped(UserTokenAuthenticator())
         protectedUsers.get("profile", use: getProfile)
+        protectedUsers.post("logout", use: logout)
     }
     
     func register(req: Request) throws -> EventLoopFuture<User> {
@@ -32,7 +33,7 @@ struct UsersController: RouteCollection {
     func login(req: Request) throws -> EventLoopFuture<UserToken> {
         try User.Login.validate(content: req)
         let input = try req.content.decode(User.Login.self)
-
+        
         return User.query(on: req.db)
             .filter(\.$email == input.email)
             .first()
@@ -40,7 +41,7 @@ struct UsersController: RouteCollection {
                 guard let user = user else {
                     return req.eventLoop.future(error: Abort(.unauthorized))
                 }
-
+                
                 do {
                     if try Bcrypt.verify(input.password, created: user.passwordHash) {
                         let token = try self.generateToken()
@@ -64,7 +65,19 @@ struct UsersController: RouteCollection {
         return req.eventLoop.future(user.name)
     }
 
-
+    // Handler that let user logout (revoke tokens)
+    func logout(req: Request) throws -> EventLoopFuture<HTTPStatus> {
+        guard let user = req.auth.get(User.self) else {
+            throw Abort(.unauthorized)
+        }
+        
+        return UserToken.query(on: req.db)
+            .filter(\.$user.$id == user.id!)
+            .delete()
+            .transform(to: .ok)
+    }
+    
+    
     // MARK: Private section.
     
     private func generateToken() throws -> String {
