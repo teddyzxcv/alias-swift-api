@@ -16,6 +16,7 @@ struct GameRoomController: RouteCollection {
         protectedGameRooms.post("create", use: create)
         protectedGameRooms.get("list-all", use: listAll)
         protectedGameRooms.post("join-room", use: joinGameRoom)
+        protectedGameRooms.post("change-setting", use: updateGameRoom)
     }
     
     func create(req: Request) throws -> EventLoopFuture<GameRoom> {
@@ -77,6 +78,42 @@ struct GameRoomController: RouteCollection {
         }.transform(to: .ok)
     }
     
+    func updateGameRoom(req: Request) throws -> EventLoopFuture<GameRoom.Public> {
+        guard let user = req.auth.get(User.self) else {
+            throw Abort(.unauthorized)
+        }
+        
+        let input = try req.content.decode(GameRoom.Update.self)
+        
+        return GameRoom.find(input.gameRoomId, on: req.db)
+            .flatMap { foundGameRoom in
+                if let gameRoom = foundGameRoom {
+                    if gameRoom.$admin.id == user.id {
+                        gameRoom.name = input.name
+                        gameRoom.isPrivate = input.isPrivate
+                        gameRoom.pointsPerWord = input.points
+
+                        return gameRoom.save(on: req.db).flatMap {
+                            gameRoom.$creator.load(on: req.db).flatMap {
+                                gameRoom.$admin.load(on: req.db).map {
+                                    GameRoom.Public(id: gameRoom.id,
+                                                    name: gameRoom.name,
+                                                    creator: gameRoom.creator.name,
+                                                    isPrivate: gameRoom.isPrivate,
+                                                    invitationCode: gameRoom.invitationCode,
+                                                    admin: gameRoom.admin.name)
+                                }
+                            }
+                        }
+                    } else {
+                        return req.eventLoop.makeFailedFuture(Abort(.forbidden, reason: "You are not authorized to edit this game room."))
+                    }
+                } else {
+                    return req.eventLoop.makeFailedFuture(Abort(.notFound))
+                }
+            }
+    }
+
     
     
     
@@ -98,6 +135,14 @@ extension GameRoom {
         var invitationCode: String
         var admin: String
     }
+    
+    struct Update: Content {
+        var isPrivate: Bool
+        var gameRoomId: UUID
+        var points: Int
+        var name: String
+    }
+    
     struct Create: Content {
         var name: String
         var isPrivate: Bool
