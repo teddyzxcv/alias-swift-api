@@ -20,6 +20,7 @@ public func configure(_ app: Application) throws {
     app.migrations.add(CreateUser())
     app.migrations.add(CreateUserToken())
     app.migrations.add(CreateGameRoom())
+    app.migrations.add(CreateGameRoomUser())
     
     // register routes
     try routes(app)
