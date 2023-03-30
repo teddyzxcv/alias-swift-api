@@ -24,3 +24,9 @@ docker compose up
 ```bash
 docker compose run migrate
 ```
+
+## Only run app local
+```bash
+docker build -t alias-api-app .
+docker run -p 8080:8080 --name alias-swift-api-app --env-file .env alias-api-app
+```
