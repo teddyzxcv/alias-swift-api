@@ -8,7 +8,13 @@ public func configure(_ app: Application) throws {
     app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
     
     var tlsConfiguration = TLSConfiguration.makeClientConfiguration()
-    tlsConfiguration.certificateVerification = .noHostnameVerification
+    if app.environment != .development {
+        tlsConfiguration.certificateVerification = .none
+        print("Start non development")
+    } else {
+        print("Start development")
+        tlsConfiguration.certificateVerification = .noHostnameVerification
+    }
     app.databases.use(.postgres(
         hostname: Environment.get("DATABASE_HOST") ?? "localhost",
         port: Environment.get("DATABASE_PORT").flatMap(Int.init(_:)) ?? PostgresConfiguration.ianaPortNumber,
