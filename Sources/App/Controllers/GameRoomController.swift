@@ -17,6 +17,7 @@ struct GameRoomController: RouteCollection {
         protectedGameRooms.get("list-all", use: listAll)
         protectedGameRooms.post("join-room", use: joinGameRoom)
         protectedGameRooms.post("change-setting", use: updateGameRoom)
+        protectedGameRooms.get("list-members", use: listMembersForGameRoom)
     }
     
     func create(req: Request) throws -> EventLoopFuture<GameRoom> {
@@ -34,7 +35,7 @@ struct GameRoomController: RouteCollection {
     }
     
     func listAll(req: Request) throws -> EventLoopFuture<[GameRoom.Public]> {
-        guard req.auth.has(User.self) else {
+        guard let user = req.auth.get(User.self) else {
             throw Abort(.unauthorized)
         }
         return GameRoom.query(on: req.db)
@@ -43,11 +44,15 @@ struct GameRoomController: RouteCollection {
             .with(\.$admin)
             .all().flatMapThrowing { gameRooms in
                 gameRooms.map { gameRoom in
+                    var code: String? = nil
+                    if user.id == gameRoom.admin.id {
+                        code = gameRoom.invitationCode
+                    }
                     return GameRoom.Public(id: gameRoom.id,
                                            name: gameRoom.name,
                                            creator: gameRoom.creator.name,
                                            isPrivate: gameRoom.isPrivate,
-                                           invitationCode: gameRoom.invitationCode,
+                                           invitationCode: code,
                                            admin: gameRoom.admin.name)
                 }
             }
@@ -92,7 +97,7 @@ struct GameRoomController: RouteCollection {
                         gameRoom.name = input.name
                         gameRoom.isPrivate = input.isPrivate
                         gameRoom.pointsPerWord = input.points
-
+                        
                         return gameRoom.save(on: req.db).flatMap {
                             gameRoom.$creator.load(on: req.db).flatMap {
                                 gameRoom.$admin.load(on: req.db).map {
@@ -116,7 +121,28 @@ struct GameRoomController: RouteCollection {
 
     
     
+    func listMembersForGameRoom(req: Request) throws -> EventLoopFuture<[User.Public]> {
+        guard let user = req.auth.get(User.self) else {
+            throw Abort(.unauthorized)
+        }
+        
+        let gameRoomId = try req.query.get(UUID.self, at: "gameRoomId")
+        
+        return GameRoomUser.query(on: req.db)
+            .filter(\.$gameRoom.$id == gameRoomId)
+            .with(\.$user)
+            .all()
+            .flatMapThrowing { gameRoomUsers in
+                gameRoomUsers.map { gameRoomUser in
+                    User.Public(id: gameRoomUser.user.id!, name: gameRoomUser.user.name)
+                }
+            }
+    }
     
+
+
+    
+    // MARK: Private
     // Private function that generate invitation code length of 5
     private func generateInvitationCode() -> String {
         let letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -125,14 +151,13 @@ struct GameRoomController: RouteCollection {
 }
 
 
-
 extension GameRoom {
     struct Public: Content {
         var id: UUID?
         var name: String
         var creator: String
         var isPrivate: Bool
-        var invitationCode: String
+        var invitationCode: String?
         var admin: String
     }
     

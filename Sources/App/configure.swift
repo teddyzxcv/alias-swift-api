@@ -9,20 +9,27 @@ public func configure(_ app: Application) throws {
     
     var tlsConfiguration = TLSConfiguration.makeClientConfiguration()
     if app.environment != .development {
+        print("Start stage or prodiction")
         tlsConfiguration.certificateVerification = .none
-        print("Start non development")
+        app.databases.use(.postgres(
+            hostname: Environment.get("DATABASE_HOST") ?? "localhost",
+            port: Environment.get("DATABASE_PORT").flatMap(Int.init(_:)) ?? PostgresConfiguration.ianaPortNumber,
+            username: Environment.get("DATABASE_USERNAME") ?? "vapor_username",
+            password: Environment.get("DATABASE_PASSWORD") ?? "vapor_password",
+            database: Environment.get("DATABASE_NAME") ?? "vapor_database",
+            tlsConfiguration: tlsConfiguration
+        ), as: .psql)
     } else {
         print("Start development")
-        tlsConfiguration.certificateVerification = .noHostnameVerification
+        app.databases.use(.postgres(
+            hostname: Environment.get("DATABASE_HOST") ?? "localhost",
+            port: Environment.get("DATABASE_PORT").flatMap(Int.init(_:)) ?? PostgresConfiguration.ianaPortNumber,
+            username: Environment.get("DATABASE_USERNAME") ?? "vapor_username",
+            password: Environment.get("DATABASE_PASSWORD") ?? "vapor_password",
+            database: Environment.get("DATABASE_NAME") ?? "vapor_database"
+        ), as: .psql)
     }
-    app.databases.use(.postgres(
-        hostname: Environment.get("DATABASE_HOST") ?? "localhost",
-        port: Environment.get("DATABASE_PORT").flatMap(Int.init(_:)) ?? PostgresConfiguration.ianaPortNumber,
-        username: Environment.get("DATABASE_USERNAME") ?? "vapor_username",
-        password: Environment.get("DATABASE_PASSWORD") ?? "vapor_password",
-        database: Environment.get("DATABASE_NAME") ?? "vapor_database",
-        tlsConfiguration: tlsConfiguration
-    ), as: .psql)
+
     
     
     app.middleware.use(UserTokenAuthenticator())
@@ -31,7 +38,11 @@ public func configure(_ app: Application) throws {
     app.migrations.add(CreateUserToken())
     app.migrations.add(CreateGameRoom())
     app.migrations.add(CreateGameRoomUser())
-    
+    app.migrations.add(CreateTeam())
+    app.migrations.add(CreateTeamUser())
+    app.migrations.add(CreateRound())
+
+
     // register routes
     try routes(app)
 }
