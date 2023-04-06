@@ -21,14 +21,14 @@ final class Round: Model, Content {
     var startTime: Date
     
     @Field(key: "end_time")
-    var endTime: Date
+    var endTime: Date?
     
     @Field(key: "state")
     var state: String
     
     init() { }
     
-    init(id: UUID? = nil, gameRoomID: UUID, startTime: Date, endTime: Date, state: String) {
+    init(id: UUID? = nil, gameRoomID: UUID, startTime: Date, endTime: Date?, state: String) {
         self.id = id
         self.$gameRoom.id = gameRoomID
         self.startTime = startTime
