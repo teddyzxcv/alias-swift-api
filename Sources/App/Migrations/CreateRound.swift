@@ -13,7 +13,7 @@ struct CreateRound: AsyncMigration {
             .id()
             .field("game_room_id", .uuid, .required, .references(GameRoom.schema, "id"))
             .field("start_time", .datetime, .required)
-            .field("end_time", .datetime, .required)
+            .field("end_time", .datetime)
             .field("state", .string, .required)
             .create()
     }

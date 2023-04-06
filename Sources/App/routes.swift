@@ -14,4 +14,5 @@ func routes(_ app: Application) throws {
     try app.register(collection: UsersController())
     try app.register(collection: GameRoomController())
     try app.register(collection: TeamController())
+    try app.register(collection: RoundController())
 }

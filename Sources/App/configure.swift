@@ -41,6 +41,7 @@ public func configure(_ app: Application) throws {
     app.migrations.add(CreateTeam())
     app.migrations.add(CreateTeamUser())
     app.migrations.add(CreateRound())
+    app.migrations.add(MakeTeamUserUnique())
 
 
     // register routes

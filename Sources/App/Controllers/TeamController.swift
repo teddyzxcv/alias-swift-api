@@ -16,36 +16,70 @@ struct TeamController: RouteCollection {
         protectedTeams.get("list-teams", use: listTeamsForGameRoom)
         protectedTeams.post("create-team", use: createTeam)
         protectedTeams.post("join-team", use: joinTeam)
+        protectedTeams.get("leave-team", use: leaveTeam)
 
     }
     
+    func leaveTeam(req: Request) throws -> EventLoopFuture<HTTPStatus> {
+        guard let user = req.auth.get(User.self) else {
+            throw Abort(.unauthorized)
+        }
+
+        let teamId = try req.query.get(UUID.self, at: "teamId")
+
+        return TeamUser.query(on: req.db)
+            .filter(\.$user.$id == user.id!)
+            .filter(\.$team.$id == teamId)
+            .first()
+            .flatMap { teamUser in
+                if let teamUser = teamUser {
+                    return teamUser.delete(on: req.db).transform(to: .ok)
+                } else {
+                    return req.eventLoop.makeFailedFuture(Abort(.notFound, reason: "User not found in the specified team."))
+                }
+            }
+    }
+
     
     func listTeamsForGameRoom(req: Request) throws -> EventLoopFuture<[Team.Public]> {
         guard let user = req.auth.get(User.self) else {
             throw Abort(.unauthorized)
         }
-        
+
         let gameRoomId = try req.query.get(UUID.self, at: "gameRoomId")
-        
-        return Team.query(on: req.db)
+
+        // Check if the user is part of the game room
+        return GameRoomUser.query(on: req.db)
+            .filter(\.$user.$id == user.id!)
             .filter(\.$gameRoom.$id == gameRoomId)
-            .all()
-            .flatMap { teams in
-                let teamUsersPublic = teams.map { team -> EventLoopFuture<Team.Public> in
-                    return TeamUser.query(on: req.db)
-                        .filter(\.$team.$id == team.id!)
-                        .with(\.$user)
-                        .all()
-                        .map { teamUsers in
-                            let usersPublic = teamUsers.map { teamUser in
-                                User.Public(id: teamUser.user.id!, name: teamUser.user.name)
-                            }
-                            return Team.Public(id: team.id!, name: team.name, users: usersPublic)
-                        }
+            .first()
+            .flatMapThrowing { gameRoomUser in
+                if gameRoomUser == nil {
+                    throw Abort(.forbidden, reason: "User is not in the game room")
                 }
-                return teamUsersPublic.flatten(on: req.eventLoop)
+            }
+            .flatMap { _ in
+                Team.query(on: req.db)
+                    .filter(\.$gameRoom.$id == gameRoomId)
+                    .all()
+                    .flatMap { teams in
+                        let teamUsersPublic = teams.map { team -> EventLoopFuture<Team.Public> in
+                            return TeamUser.query(on: req.db)
+                                .filter(\.$team.$id == team.id!)
+                                .with(\.$user)
+                                .all()
+                                .map { teamUsers in
+                                    let usersPublic = teamUsers.map { teamUser in
+                                        User.Public(id: teamUser.user.id!, name: teamUser.user.name)
+                                    }
+                                    return Team.Public(id: team.id!, name: team.name, users: usersPublic)
+                                }
+                        }
+                        return teamUsersPublic.flatten(on: req.eventLoop)
+                    }
             }
     }
+
     
     
     func joinTeam(req: Request) throws -> EventLoopFuture<HTTPStatus> {

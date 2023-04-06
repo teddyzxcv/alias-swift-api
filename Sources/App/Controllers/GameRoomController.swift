@@ -18,7 +18,30 @@ struct GameRoomController: RouteCollection {
         protectedGameRooms.post("join-room", use: joinGameRoom)
         protectedGameRooms.post("change-setting", use: updateGameRoom)
         protectedGameRooms.get("list-members", use: listMembersForGameRoom)
+        protectedGameRooms.get("leave-room", use: leaveGameRoom)
     }
+    
+    // Update the leaveGameRoom function
+    func leaveGameRoom(req: Request) throws -> EventLoopFuture<HTTPStatus> {
+        guard let user = req.auth.get(User.self) else {
+            throw Abort(.unauthorized)
+        }
+        
+        let gameRoomId = try req.query.get(UUID.self, at: "gameRoomId")
+        
+        return GameRoomUser.query(on: req.db)
+            .filter(\.$user.$id == user.id!)
+            .filter(\.$gameRoom.$id == gameRoomId)
+            .first()
+            .flatMap { gameRoomUser in
+                if let gameRoomUser = gameRoomUser {
+                    return gameRoomUser.delete(on: req.db).transform(to: .ok)
+                } else {
+                    return req.eventLoop.makeFailedFuture(Abort(.notFound, reason: "User not found in the specified game room."))
+                }
+            }
+    }
+
     
     func create(req: Request) throws -> EventLoopFuture<GameRoom> {
         guard let user = req.auth.get(User.self) else {
@@ -125,19 +148,32 @@ struct GameRoomController: RouteCollection {
         guard let user = req.auth.get(User.self) else {
             throw Abort(.unauthorized)
         }
-        
+
         let gameRoomId = try req.query.get(UUID.self, at: "gameRoomId")
-        
+
+        // Check if the user is part of the game room
         return GameRoomUser.query(on: req.db)
+            .filter(\.$user.$id == user.id!)
             .filter(\.$gameRoom.$id == gameRoomId)
-            .with(\.$user)
-            .all()
-            .flatMapThrowing { gameRoomUsers in
-                gameRoomUsers.map { gameRoomUser in
-                    User.Public(id: gameRoomUser.user.id!, name: gameRoomUser.user.name)
+            .first()
+            .flatMapThrowing { gameRoomUser in
+                if gameRoomUser == nil {
+                    throw Abort(.forbidden, reason: "User is not in the game room")
                 }
             }
+            .flatMap { _ in
+                GameRoomUser.query(on: req.db)
+                    .filter(\.$gameRoom.$id == gameRoomId)
+                    .with(\.$user)
+                    .all()
+                    .flatMapThrowing { gameRoomUsers in
+                        gameRoomUsers.map { gameRoomUser in
+                            User.Public(id: gameRoomUser.user.id!, name: gameRoomUser.user.name)
+                        }
+                    }
+            }
     }
+
     
 
 
