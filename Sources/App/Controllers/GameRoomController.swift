@@ -19,7 +19,68 @@ struct GameRoomController: RouteCollection {
         protectedGameRooms.post("change-setting", use: updateGameRoom)
         protectedGameRooms.get("list-members", use: listMembersForGameRoom)
         protectedGameRooms.get("leave-room", use: leaveGameRoom)
+        protectedGameRooms.post("close-room", use: closeGameRoom)
+        protectedGameRooms.post("kick-participant", use: kickParticipant)
+        protectedGameRooms.post("pass-admin-status", use: passAdminStatus)
     }
+    
+    func passAdminStatus(req: Request) throws -> EventLoopFuture<HTTPStatus> {
+        guard let user = req.auth.get(User.self) else {
+            throw Abort(.unauthorized)
+        }
+        
+        let input = try req.content.decode(GameRoom.PassAdminStatus.self)
+
+        // Check if the current user is the admin of the game room
+        return GameRoom.query(on: req.db)
+            .filter(\.$id == input.gameRoomId)
+            .filter(\.$admin.$id == user.id!)
+            .with(\.$admin)
+            .first()
+            .flatMap { gameRoom in
+                if let gameRoom = gameRoom {
+                    // Pass the admin status to another user
+                    return User.find(input.newAdminId, on: req.db)
+                        .flatMap { newAdmin in
+                            if let newAdmin = newAdmin {
+                                gameRoom.$admin.id = newAdmin.id!
+                                gameRoom.admin = newAdmin
+                                return gameRoom.save(on: req.db).transform(to: .ok)
+                            } else {
+                                return req.eventLoop.makeFailedFuture(Abort(.notFound, reason: "New admin not found"))
+                            }
+                        }
+                } else {
+                    return req.eventLoop.makeFailedFuture(Abort(.forbidden, reason: "Only the game room admin can pass admin status"))
+                }
+            }
+    }
+    
+    func kickParticipant(req: Request) throws -> EventLoopFuture<HTTPStatus> {
+            guard let user = req.auth.get(User.self) else {
+                throw Abort(.unauthorized)
+            }
+            
+        let input = try req.content.decode(GameRoom.KickParticipant.self)
+
+            // Check if the current user is the admin of the game room
+            return GameRoom.query(on: req.db)
+                .filter(\.$id == input.gameRoomId)
+                .filter(\.$admin.$id == user.id!)
+                .first()
+                .flatMap { gameRoom in
+                    if let gameRoom = gameRoom {
+                        // Delete the GameRoomUser record for the user to be kicked
+                        return GameRoomUser.query(on: req.db)
+                            .filter(\.$user.$id == input.userIdToKick)
+                            .filter(\.$gameRoom.$id == gameRoom.id!)
+                            .delete()
+                            .transform(to: .ok)
+                    } else {
+                        return req.eventLoop.makeFailedFuture(Abort(.forbidden, reason: "Only the game room admin can kick participants"))
+                    }
+                }
+        }
     
     // Update the leaveGameRoom function
     func leaveGameRoom(req: Request) throws -> EventLoopFuture<HTTPStatus> {
@@ -29,19 +90,86 @@ struct GameRoomController: RouteCollection {
         
         let gameRoomId = try req.query.get(UUID.self, at: "gameRoomId")
         
-        return GameRoomUser.query(on: req.db)
-            .filter(\.$user.$id == user.id!)
-            .filter(\.$gameRoom.$id == gameRoomId)
-            .first()
-            .flatMap { gameRoomUser in
-                if let gameRoomUser = gameRoomUser {
-                    return gameRoomUser.delete(on: req.db).transform(to: .ok)
+        return GameRoom.find(gameRoomId, on: req.db)
+            .flatMap { foundGameRoom in
+                if let gameRoom = foundGameRoom {
+                    if gameRoom.$admin.id == user.id {
+                        // Delete all GameRoomUser records related to the game room
+                        return GameRoomUser.query(on: req.db)
+                            .filter(\.$gameRoom.$id == gameRoom.id!)
+                            .delete()
+                            .flatMap {
+                                // Delete all TeamUser records related to the game room's teams
+                                return TeamUser.query(on: req.db)
+                                    .join(Team.self, on: \TeamUser.$team.$id == \Team.$id)
+                                    .filter(Team.self, \.$gameRoom.$id == gameRoom.id!)
+                                    .delete()
+                                    .flatMap {
+                                        // Delete all Team records related to the game room
+                                        return Team.query(on: req.db)
+                                            .filter(\.$gameRoom.$id == gameRoom.id!)
+                                            .delete()
+                                            .flatMap {
+                                                // Delete the game room
+                                                return gameRoom.delete(on: req.db).transform(to: .ok)
+                                            }
+                                    }
+                            }
+                    } else {
+                        return req.eventLoop.makeFailedFuture(Abort(.forbidden, reason: "Only the game room admin can close the game room"))
+                    }
                 } else {
-                    return req.eventLoop.makeFailedFuture(Abort(.notFound, reason: "User not found in the specified game room."))
+                    return req.eventLoop.makeFailedFuture(Abort(.notFound, reason: "Game room not found"))
                 }
             }
     }
+    
+    func closeGameRoom(req: Request) throws -> EventLoopFuture<HTTPStatus> {
+        guard let user = req.auth.get(User.self) else {
+            throw Abort(.unauthorized)
+        }
 
+        let input = try req.content.decode(GameRoom.Close.self)
+
+        return GameRoom.find(input.gameRoomId, on: req.db)
+            .flatMap { foundGameRoom in
+                if let gameRoom = foundGameRoom {
+                    if gameRoom.$admin.id == user.id {
+                        // Find all Team records related to the game room
+                        return Team.query(on: req.db)
+                            .filter(\.$gameRoom.$id == gameRoom.id!)
+                            .all()
+                            .flatMap { teams in
+                                // Delete all TeamUser records related to the game room's teams
+                                return TeamUser.query(on: req.db)
+                                    .join(Team.self, on: \TeamUser.$team.$id == \Team.$id)
+                                    .filter(Team.self, \.$gameRoom.$id == gameRoom.id!)
+                                    .delete()
+                                    .flatMap {
+                                        // Delete all Round records related to the game room
+                                        return Round.query(on: req.db)
+                                            .filter(\.$gameRoom.$id == gameRoom.id!)
+                                            .delete()
+                                            .flatMap {
+                                                // Delete all Team records related to the game room
+                                                return Team.query(on: req.db)
+                                                    .filter(\.$gameRoom.$id == gameRoom.id!)
+                                                    .delete()
+                                                    .flatMap {
+                                                        // Delete the game room
+                                                        return gameRoom.delete(on: req.db).transform(to: .ok)
+                                                    }
+                                            }
+                                    }
+                            }
+                    } else {
+                        return req.eventLoop.makeFailedFuture(Abort(.forbidden, reason: "Only the game room admin can close the game room"))
+                    }
+                } else {
+                    return req.eventLoop.makeFailedFuture(Abort(.notFound, reason: "Game room not found"))
+                }
+            }
+    }
     
     func create(req: Request) throws -> EventLoopFuture<GameRoom> {
         guard let user = req.auth.get(User.self) else {
@@ -141,16 +269,16 @@ struct GameRoomController: RouteCollection {
                 }
             }
     }
-
+    
     
     
     func listMembersForGameRoom(req: Request) throws -> EventLoopFuture<[User.Public]> {
         guard let user = req.auth.get(User.self) else {
             throw Abort(.unauthorized)
         }
-
+        
         let gameRoomId = try req.query.get(UUID.self, at: "gameRoomId")
-
+        
         // Check if the user is part of the game room
         return GameRoomUser.query(on: req.db)
             .filter(\.$user.$id == user.id!)
@@ -173,10 +301,10 @@ struct GameRoomController: RouteCollection {
                     }
             }
     }
-
     
-
-
+    
+    
+    
     
     // MARK: Private
     // Private function that generate invitation code length of 5
@@ -188,6 +316,16 @@ struct GameRoomController: RouteCollection {
 
 
 extension GameRoom {
+    struct PassAdminStatus: Content {
+           var gameRoomId: UUID
+           var newAdminId: UUID
+    }
+    
+    struct KickParticipant: Content {
+        var gameRoomId: UUID
+        var userIdToKick: UUID
+    }
+    
     struct Public: Content {
         var id: UUID?
         var name: String
@@ -212,6 +350,10 @@ extension GameRoom {
     struct Join: Content {
         var gameRoomId: UUID
         var invitationCode: String
+    }
+    
+    struct Close: Content {
+        var gameRoomId: UUID
     }
 }
 
