@@ -17,7 +17,7 @@ struct TeamController: RouteCollection {
         protectedTeams.post("create-team", use: createTeam)
         protectedTeams.post("join-team", use: joinTeam)
         protectedTeams.get("leave-team", use: leaveTeam)
-
+        protectedTeams.post("close-team", use: closeTeam)
     }
     
     func leaveTeam(req: Request) throws -> EventLoopFuture<HTTPStatus> {
@@ -97,8 +97,15 @@ struct TeamController: RouteCollection {
                     .first()
                     .flatMap { foundGameRoomUser -> EventLoopFuture<HTTPStatus> in
                         if foundGameRoomUser != nil {
-                            let teamUser = TeamUser(userID: user.id!, teamID: team.id!)
-                            return teamUser.save(on: req.db).transform(to: .ok)
+                            // Find and delete any existing TeamUser relation with the user
+                            return TeamUser.query(on: req.db)
+                                .filter(\.$user.$id == user.id!)
+                                .delete()
+                                .flatMap { _ in
+                                    // Create a new TeamUser relation between the user and the team
+                                    let teamUser = TeamUser(userID: user.id!, teamID: team.id!)
+                                    return teamUser.save(on: req.db).transform(to: .ok)
+                                }
                         } else {
                             return req.eventLoop.makeFailedFuture(Abort(.forbidden, reason: "User is not in the game room"))
                         }
@@ -108,6 +115,7 @@ struct TeamController: RouteCollection {
             }
         }
     }
+
     
     
     func createTeam(req: Request) throws -> EventLoopFuture<Team.Public> {
@@ -131,6 +139,38 @@ struct TeamController: RouteCollection {
             }
     }
     
+    func closeTeam(req: Request) throws -> EventLoopFuture<HTTPStatus> {
+        guard let user = req.auth.get(User.self) else {
+            throw Abort(.unauthorized)
+        }
+
+        let input = try req.content.decode(Team.Close.self)
+
+        return Team.find(input.teamId, on: req.db)
+            .flatMap { foundTeam in
+                if let team = foundTeam {
+                    return GameRoom.find(team.$gameRoom.id, on: req.db)
+                        .flatMap { foundGameRoom in
+                            if let gameRoom = foundGameRoom, gameRoom.$admin.id == user.id {
+                                // Delete all TeamUser records related to the team
+                                return TeamUser.query(on: req.db)
+                                    .filter(\.$team.$id == team.id!)
+                                    .delete()
+                                    .flatMap {
+                                        // Delete the team
+                                        return team.delete(on: req.db).transform(to: .ok)
+                                    }
+                            } else {
+                                return req.eventLoop.makeFailedFuture(Abort(.forbidden, reason: "Only the game room admin can close the team"))
+                            }
+                        }
+                } else {
+                    return req.eventLoop.makeFailedFuture(Abort(.notFound, reason: "Team not found"))
+                }
+            }
+    }
+
+
 }
 
 
@@ -156,6 +196,10 @@ extension Team {
     struct Create: Content {
         var name: String
         var gameRoomId: UUID
+    }
+    
+    struct Close: Content {
+            var teamId: UUID
     }
 }
 
