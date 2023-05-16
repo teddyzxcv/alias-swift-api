@@ -215,24 +215,30 @@ struct GameRoomController: RouteCollection {
         }
         
         let input = try req.content.decode(GameRoom.Join.self)
-        let gameRoom = GameRoom.query(on: req.db)
+        let gameRoomQuery = GameRoom.query(on: req.db)
             .filter(\.$id == input.gameRoomId)
-            .filter(\.$invitationCode == input.invitationCode)
-            .all()
-            .flatMapThrowing { gameRooms -> GameRoom in
-                guard let gameRoom = gameRooms.first else {
-                    throw Abort(.notFound)
+        
+        // If an invitation code is provided, add it to the query
+        if let invitationCode = input.invitationCode {
+            gameRoomQuery.filter(\.$invitationCode == invitationCode)
+        }
+        
+        return gameRoomQuery.first().flatMap { foundGameRoom in
+            if let gameRoom = foundGameRoom {
+                // If the game room is private and the invitation code does not match, return an error
+                if gameRoom.isPrivate && gameRoom.invitationCode != input.invitationCode {
+                    return req.eventLoop.makeFailedFuture(Abort(.forbidden, reason: "Invalid invitation code for private game room"))
                 }
-                guard gameRooms.count == 1 else {
-                    throw Abort(.notFound)
-                }
-                return gameRoom
+                
+                // If the game room is not private or if the invitation code matches, add the user to the game room
+                let gameRoomUser = GameRoomUser(userID: user.id!, gameRoomID: gameRoom.id!)
+                return gameRoomUser.save(on: req.db).transform(to: .ok)
+            } else {
+                return req.eventLoop.makeFailedFuture(Abort(.notFound, reason: "Game room not found"))
             }
-        return gameRoom.flatMap { gameRoom in
-            let gameRoomUser = GameRoomUser(userID: user.id!, gameRoomID: gameRoom.id!)
-            return gameRoomUser.save(on: req.db)
-        }.transform(to: .ok)
+        }
     }
+
     
     func updateGameRoom(req: Request) throws -> EventLoopFuture<GameRoom.Public> {
         guard let user = req.auth.get(User.self) else {
@@ -349,7 +355,7 @@ extension GameRoom {
     
     struct Join: Content {
         var gameRoomId: UUID
-        var invitationCode: String
+        var invitationCode: String?
     }
     
     struct Close: Content {
