@@ -209,7 +209,7 @@ struct GameRoomController: RouteCollection {
             }
     }
     
-    func joinGameRoom(req: Request) throws -> EventLoopFuture<HTTPStatus> {
+    func joinGameRoom(req: Request) throws -> EventLoopFuture<GameRoom.JoinResponse> {
         guard let user = req.auth.get(User.self) else {
             throw Abort(.unauthorized)
         }
@@ -232,7 +232,20 @@ struct GameRoomController: RouteCollection {
                 
                 // If the game room is not private or if the invitation code matches, add the user to the game room
                 let gameRoomUser = GameRoomUser(userID: user.id!, gameRoomID: gameRoom.id!)
-                return gameRoomUser.save(on: req.db).transform(to: .ok)
+                return gameRoomUser.save(on: req.db).flatMap { _ in
+                    return User.find(gameRoom.$admin.id, on: req.db).flatMap { admin in
+                        return User.find(gameRoom.$creator.id, on: req.db).map{ creator in
+                            GameRoom.JoinResponse(
+                                id: gameRoom.id,
+                                name: gameRoom.name,
+                                creator: creator?.$name.value ?? "default value",
+                                isPrivate: gameRoom.isPrivate,
+                                invitationCode: gameRoom.invitationCode,
+                                admin: admin?.$name.value ?? "default value",
+                                points: gameRoom.pointsPerWord) // Return the game room as a successful result
+                        }
+                    }
+                }
             } else {
                 return req.eventLoop.makeFailedFuture(Abort(.notFound, reason: "Game room not found"))
             }
@@ -360,6 +373,16 @@ extension GameRoom {
     
     struct Close: Content {
         var gameRoomId: UUID
+    }
+    
+    struct JoinResponse: Content {
+        var id: UUID?
+        var name: String
+        var creator: String
+        var isPrivate: Bool
+        var invitationCode: String?
+        var admin: String
+        var points: Int
     }
 }
 
