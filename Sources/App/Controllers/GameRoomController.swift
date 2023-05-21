@@ -186,7 +186,7 @@ struct GameRoomController: RouteCollection {
                                 creator: creator?.$name.value ?? "default value",
                                 isPrivate: gameRoom.isPrivate,
                                 invitationCode: gameRoom.invitationCode,
-                                admin: admin?.$name.value ?? "default value",
+                                admin: String((admin?.$id.value)!),
                                 points: gameRoom.pointsPerWord) // Return the game room as a successful result
                         }
                     }
