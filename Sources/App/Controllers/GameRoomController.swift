@@ -111,44 +111,9 @@ struct GameRoomController: RouteCollection {
 
         let input = try req.content.decode(GameRoom.Close.self)
 
-        return GameRoom.find(input.gameRoomId, on: req.db)
-            .flatMap { foundGameRoom in
-                if let gameRoom = foundGameRoom {
-                    if gameRoom.$admin.id == user.id {
-                        // Find all Team records related to the game room
-                        return Team.query(on: req.db)
-                            .filter(\.$gameRoom.$id == gameRoom.id!)
-                            .all()
-                            .flatMap { teams in
-                                // Delete all TeamUser records related to the game room's teams
-                                return TeamUser.query(on: req.db)
-                                    .join(Team.self, on: \TeamUser.$team.$id == \Team.$id)
-                                    .filter(Team.self, \.$gameRoom.$id == gameRoom.id!)
-                                    .delete()
-                                    .flatMap {
-                                        // Delete all Round records related to the game room
-                                        return Round.query(on: req.db)
-                                            .filter(\.$gameRoom.$id == gameRoom.id!)
-                                            .delete()
-                                            .flatMap {
-                                                // Delete all Team records related to the game room
-                                                return Team.query(on: req.db)
-                                                    .filter(\.$gameRoom.$id == gameRoom.id!)
-                                                    .delete()
-                                                    .flatMap {
-                                                        // Delete the game room
-                                                        return gameRoom.delete(on: req.db).transform(to: .ok)
-                                                    }
-                                            }
-                                    }
-                            }
-                    } else {
-                        return req.eventLoop.makeFailedFuture(Abort(.forbidden, reason: "Only the game room admin can close the game room"))
-                    }
-                } else {
-                    return req.eventLoop.makeFailedFuture(Abort(.notFound, reason: "Game room not found"))
-                }
-            }
+        return GameRoomUser.query(on: req.db)
+            .filter(\.$gameRoom.$id == input.gameRoomId)
+            .delete().transform(to: .ok)
     }
     
     func create(req: Request) throws -> EventLoopFuture<GameRoom> {
