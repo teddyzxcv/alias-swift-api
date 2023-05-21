@@ -93,31 +93,11 @@ struct GameRoomController: RouteCollection {
         return GameRoom.find(gameRoomId, on: req.db)
             .flatMap { foundGameRoom in
                 if let gameRoom = foundGameRoom {
-                    if gameRoom.$admin.id == user.id {
                         // Delete all GameRoomUser records related to the game room
                         return GameRoomUser.query(on: req.db)
-                            .filter(\.$gameRoom.$id == gameRoom.id!)
-                            .delete()
-                            .flatMap {
-                                // Delete all TeamUser records related to the game room's teams
-                                return TeamUser.query(on: req.db)
-                                    .join(Team.self, on: \TeamUser.$team.$id == \Team.$id)
-                                    .filter(Team.self, \.$gameRoom.$id == gameRoom.id!)
-                                    .delete()
-                                    .flatMap {
-                                        // Delete all Team records related to the game room
-                                        return Team.query(on: req.db)
-                                            .filter(\.$gameRoom.$id == gameRoom.id!)
-                                            .delete()
-                                            .flatMap {
-                                                // Delete the game room
-                                                return gameRoom.delete(on: req.db).transform(to: .ok)
-                                            }
-                                    }
-                            }
-                    } else {
-                        return req.eventLoop.makeFailedFuture(Abort(.forbidden, reason: "Only the game room admin can close the game room"))
-                    }
+                        .filter(\.$gameRoom.$id == gameRoom.id!)
+                        .filter(\.$user.$id == user.id!)
+                        .delete().transform(to: .ok)
                 } else {
                     return req.eventLoop.makeFailedFuture(Abort(.notFound, reason: "Game room not found"))
                 }
