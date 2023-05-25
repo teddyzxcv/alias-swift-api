@@ -16,6 +16,7 @@ struct GameRoomController: RouteCollection {
         protectedGameRooms.post("create", use: create)
         protectedGameRooms.get("list-all", use: listAll)
         protectedGameRooms.post("join-room", use: joinGameRoom)
+        protectedGameRooms.post("get-room", use: getGameRoom)
         protectedGameRooms.post("change-setting", use: updateGameRoom)
         protectedGameRooms.get("list-members", use: listMembersForGameRoom)
         protectedGameRooms.get("leave-room", use: leaveGameRoom)
@@ -191,6 +192,49 @@ struct GameRoomController: RouteCollection {
                         }
                     }
                 }
+            } else {
+                return req.eventLoop.makeFailedFuture(Abort(.notFound, reason: "Game room not found"))
+            }
+        }
+    }
+
+    func getGameRoom(req: Request) throws -> EventLoopFuture<GameRoom.JoinResponse> {
+        guard let user = req.auth.get(User.self) else {
+            throw Abort(.unauthorized)
+        }
+        
+        let input = try req.content.decode(GameRoom.Join.self)
+        
+        print("dvcah")
+        let gameRoomQuery = GameRoom.query(on: req.db)
+            .filter(\.$id == input.gameRoomId)
+        
+        // If an invitation code is provided, add it to the query
+        if let invitationCode = input.invitationCode {
+            gameRoomQuery.filter(\.$invitationCode == invitationCode)
+        }
+        
+        return gameRoomQuery.first().flatMap { foundGameRoom in
+            if let gameRoom = foundGameRoom {
+                // If the game room is private and the invitation code does not match, return an error
+                if gameRoom.isPrivate && gameRoom.invitationCode != input.invitationCode {
+                    return req.eventLoop.makeFailedFuture(Abort(.forbidden, reason: "Invalid invitation code for private game room"))
+                }
+                
+                // If the game room is not private or if the invitation code matches, add the user to the game room
+                    return User.find(gameRoom.$admin.id, on: req.db).flatMap { admin in
+                        return User.find(gameRoom.$creator.id, on: req.db).map{ creator in
+                            print(creator)
+                            return GameRoom.JoinResponse(
+                                id: gameRoom.id,
+                                name: gameRoom.name,
+                                creator: creator?.$name.value ?? "default value",
+                                isPrivate: gameRoom.isPrivate,
+                                invitationCode: gameRoom.invitationCode,
+                                admin: String((admin?.$id.value)!),
+                                points: gameRoom.pointsPerWord) // Return the game room as a successful result
+                        }
+                    }
             } else {
                 return req.eventLoop.makeFailedFuture(Abort(.notFound, reason: "Game room not found"))
             }
